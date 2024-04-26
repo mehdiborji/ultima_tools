@@ -18,7 +18,7 @@ limit = args.limit
 
 ######################################################
 
-cram_utils.cram_fastq_split_by_lines(indir, sample, cores, 8e4)
+cram_utils.cram_fastq_split_by_lines(indir, sample, cores, 4e7)
 
 ######################################################
 

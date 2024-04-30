@@ -4,10 +4,10 @@ import cram_utils
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--cores', type=str)
-parser.add_argument('-i', '--indir', type=str)
-parser.add_argument('-s', '--sample', type=str)
-parser.add_argument('-l', '--limit', default=False, action='store_true')
+parser.add_argument("-c", "--cores", type=str)
+parser.add_argument("-i", "--indir", type=str)
+parser.add_argument("-s", "--sample", type=str)
+parser.add_argument("-l", "--limit", default=False, action="store_true")
 
 args = parser.parse_args()
 

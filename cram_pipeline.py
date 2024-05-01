@@ -22,15 +22,15 @@ cram_utils.cram_fastq_split_by_lines(indir, sample, cores, 4e7)
 
 ######################################################
 
-"""
-parts = bc_umi_utils.find_sub_fastq_parts(indir,sample)
-args = [(indir, sample, part, limit, read1_struct, read2_struct) for part in parts]
+parts = cram_utils.find_sub_fastq_parts(indir, sample)
+args = [(indir, sample, part, limit) for part in parts]
 
 pool = Pool(int(cores))
-results = pool.starmap(bc_umi_utils.extract_bc_umi_dict, args)
+results = pool.starmap(cram_utils.extract_trimmed_fastq_pairs, args)
 pool.close()
 pool.join()
 
+"""
 ######################################################
 
 bc_umi_utils.aggregate_dicts(indir,sample,'anchors')
@@ -49,6 +49,5 @@ else:
     bc_umi_utils.whitelist_rankplot(indir,sample,'anchors',qc_pdfs,max_anchors)
     bc_umi_utils.whitelist_rankplot(indir,sample,'targets',qc_pdfs,max_targets)
     qc_pdfs.close()
-    
 
 """

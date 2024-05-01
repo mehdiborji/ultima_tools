@@ -4,13 +4,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import edlib
-import csv
-import json
 import subprocess
-import matplotlib.pyplot as plt
-import seaborn as sns
 import re
-from multiprocessing import Pool
+
 import mappy
 
 UP_seq = "TCTTCAGCGTTCCCGAGA"
@@ -101,6 +97,7 @@ def edit_match(input_seq, target_seq, max_dist):
 
     return (match, dist)
 
+
 def quality_calc(seq, quals, bases_dict, quals_dict):
     for i in range(len(seq)):
         if bases_dict.get(str(i)) is None:
@@ -131,10 +128,11 @@ def quality_df(quals_dict):
     quals_df["freq"] = quals_df.ncount / quals_df.position_cnt * 100
     return quals_df
 
+
 def extract_trimmed_fastq_pairs(indir, sample, part, limit):
     i = 0
     max_dist = 3
-    
+
     timmed_length = 55
 
     ultima_fastq = f"{indir}/{sample}/split/{sample}.part_{part}.fastq"
@@ -144,12 +142,12 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
 
     r1_qual_dict = {}
     r2_qual_dict = {}
-    
+
     r1_base_dict = {}
     r2_base_dict = {}
-    
+
     do_qc = True
-    
+
     R1_quals = R1_fastq.replace(".fastq", "_quals.csv")
     if os.path.isfile(R1_quals):
         print(R1_quals, " exists, skip")
@@ -163,26 +161,30 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
             i += 1
 
             seq = r.sequence
-
             rlen = len(seq)
 
+            # reconstruction libraries are in this range
             if rlen > 135 and rlen < 170:
+                # find TruSeqR1 position in the first 50nt of the read
 
                 begin_seq = seq[:50]
                 accept_r1 = False
                 pos_con_in_begin = begin_seq.find(left_const)
                 if pos_con_in_begin >= 0:
                     accept_r1 = True
-                    dist_left_const = 0
                     pos_con_in_begin += len(left_const)
                 else:
-                    edit = edlib.align(left_const, begin_seq, "HW", "locations", max_dist)
+                    edit = edlib.align(
+                        left_const, begin_seq, "HW", "locations", max_dist
+                    )
                     dist = edit["editDistance"]
                     if dist >= 0:
                         accept_r1 = True
                         locs = edit["locations"][0]
                         pos_con_in_begin = locs[1] + 1
-                        
+
+                # find TruSeqR2 position in the last 50nt of the read
+
                 end_seq = seq[-50:]
                 accept_r2 = False
                 pos_con_in_end = end_seq.find(right_const)
@@ -190,7 +192,9 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
                     accept_r2 = True
                     dist = 0
                 else:
-                    edit = edlib.align(right_const, end_seq, "HW", "locations", max_dist)
+                    edit = edlib.align(
+                        right_const, end_seq, "HW", "locations", max_dist
+                    )
                     dist = edit["editDistance"]
                     if dist >= 0:
                         accept_r2 = True
@@ -199,17 +203,20 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
 
                 if accept_r2 and accept_r1:
                     qual = r.quality
-                    
+
+                    # Actually trim and split to get R1
                     trim_begin = pos_con_in_begin
                     r1_seq = seq[trim_begin : trim_begin + timmed_length]
                     r1_qual = qual[trim_begin : trim_begin + timmed_length]
-                    
+
                     # this is a very specfic insertion pattern which I manually replace!!
-                    
-                    if r1_seq[8:15] == 'TCCTTCA':
+
+                    if r1_seq[8:15] == "TCCTTCA":
                         r1_seq = r1_seq[:9] + r1_seq[10:]
                         r1_qual = r1_qual[:9] + r1_qual[10:]
-                        
+
+                    # Actually trim and split to get R2
+
                     trim_end = 50 - pos_con_in_end
                     r2_seq = mappy.revcomp(seq[-trim_end - timmed_length : -trim_end])
                     r2_qual = qual[-trim_end - timmed_length : -trim_end][::-1]
@@ -224,13 +231,13 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
                     R2.write("+\n")
                     R2.write(f"{r2_qual}\n")
 
-                    if do_qc and i % 100 == 0:
+                    if do_qc and i % 200 == 0:
                         quality_calc(r1_seq, r1_qual, r1_base_dict, r1_qual_dict)
                         quality_calc(r2_seq, r2_qual, r2_base_dict, r2_qual_dict)
 
             if i > N_read_extract and limit:
                 break
-    
+
     r1_qual_df = quality_df(r1_qual_dict)
     r2_qual_df = quality_df(r2_qual_dict)
     r1_base_df = quality_df(r1_base_dict)
@@ -240,9 +247,10 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
     r2_qual_df.to_csv(R2_fastq.replace(".fastq", "_quals.csv"))
     r1_base_df.to_csv(R1_fastq.replace(".fastq", "_bases.csv"))
     r2_base_df.to_csv(R2_fastq.replace(".fastq", "_bases.csv"))
-    
+
     R1.close()
     R2.close()
+
 
 def find_sub_fastq_parts(indir, sample):
     # pattern = re.compile(r"_R1.part_(.*?)\.fastq")

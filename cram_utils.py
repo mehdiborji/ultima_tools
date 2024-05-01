@@ -122,12 +122,8 @@ def quality_df(quals_dict):
     quals_df = quals_df.fillna(0)
     quals_df = quals_df.stack()
     quals_df = quals_df.reset_index()
-    # quals_df.columns = ['base', 'quality', 'tot_count']
-    # quals_df['mult'] = quals_df.quality * quals_df.tot_count
-    # quals_df_grouped = quals_df.groupby('base').sum()
     quals_df.columns = ["position", "value", "ncount"]
     quals_df.position = quals_df.position.astype("int") + 1
-    # quals_df[quals_df.position.isin(np.arange(10))]
     counts_df = quals_df.groupby("position").sum()
     quals_df["position_cnt"] = quals_df.position.apply(
         lambda x: counts_df.loc[x].ncount
@@ -208,6 +204,12 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
                     r1_seq = seq[trim_begin : trim_begin + timmed_length]
                     r1_qual = qual[trim_begin : trim_begin + timmed_length]
                     
+                    # this is a very specfic insertion pattern which I manually replace!!
+                    
+                    if r1_seq[8:15] == 'TCCTTCA':
+                        r1_seq = r1_seq[:9] + r1_seq[10:]
+                        r1_qual = r1_qual[:9] + r1_qual[10:]
+                        
                     trim_end = 50 - pos_con_in_end
                     r2_seq = mappy.revcomp(seq[-trim_end - timmed_length : -trim_end])
                     r2_qual = qual[-trim_end - timmed_length : -trim_end][::-1]

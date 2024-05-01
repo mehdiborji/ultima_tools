@@ -11,11 +11,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 from multiprocessing import Pool
+import mappy
 
 UP_seq = "TCTTCAGCGTTCCCGAGA"
+UP_seq_revcomp = "TCTCGGGAACGCTGAAGA"
 
+const_3prime_full_forward = 'TCAGACGTGTGCTCTTCCGATCT' #right
+const_3prime_full_reverse = 'AGATCGGAAGAGCACACGTCTGA' #right
+const_5prime_full_forward = 'CTACACGACGCTCTTCCGATCT' # left
 
-filter_poly = True
+right_const = const_3prime_full_reverse[:20]
+left_const = const_5prime_full_forward[-20:]
 
 N_read_extract = 1000000
 
@@ -145,83 +151,103 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
 
     do_qc = True
 
-    if os.path.isfile(bcs_json):
-        print(bcs_json, " exists, skip")
-        return
+    #if os.path.isfile(bcs_json):
+    #    print(bcs_json, " exists, skip")
+    #    return
 
     R1 = open(R1_fastq, "w")
     R2 = open(R2_fastq, "w")
 
     with pysam.FastxFile(ultima_fastq) as R:
         for r in tqdm(R):
+            
             i += 1
 
             seq = r.sequence
 
-            len_r = len(seq)
+            rlen = len(seq)
+            
+            if rlen>130 and rlen<170:
+            
+                end_seq = seq[-50:]
+                accept_r2 = False
+                pos_con_in_end = end_seq.find(right_const)
+                if pos_con_in_end>=0:
+                    accept_r2 = True
+                    dist = 0
+                else:
+                    edit = edlib.align(right_const, end_seq,'HW','locations',3)
+                    dist = edit['editDistance']
+                    if dist>=0:
+                        accept_r2 = True
+                        locs = edit['locations'][0]
+                        pos_con_in_end = locs[0]
 
-            if do_qc and i % 500 == 0:
-                quals = r.get_quality_array()
-                quality_calc(seq, quals, r_base_dict, r_qual_dict)
+                begin_seq = seq[:50]
+                accept_r1 = False
+                pos_con_in_begin = begin_seq.find(left_const)
+                if pos_con_in_begin >=0 :
+                    accept_r1 = True
+                    dist_left_const = 0
+                    pos_con_in_begin += len(left_const)
+                else:
+                    edit = edlib.align(left_const, begin_seq, 'HW', 'locations', 3)
+                    dist = edit['editDistance']
+                    if dist >=0 :
+                        accept_r1 = True
+                        locs = edit['locations'][0]
+                        pos_con_in_begin = locs[1]+1
+                        dist_left_const = dist
 
-            if len_r >= 100:
-                match, dist = edit_match(seq[:8], "CAGACGCG", 2)
-
-                if match:
+                if accept_r2 and accept_r1:
+                    
+                    qual = r.quality
+                    trim_begin  = pos_con_in_begin
+                    r1_seq = seq[trim_begin:trim_begin+50]
+                    r1_qual = qual[trim_begin:trim_begin+50]
+                    
+                    trim_end  = 50 - pos_con_in_end
+                    r2_seq = mappy.revcomp(seq[-trim_end-50:-trim_end])
+                    r2_qual = qual[-trim_end-50:-trim_end][::-1]
+                    
                     R1.write(f"@{r.name}_1\n")
-                    R1.write(f"{r.sequence[15:48]}\n")
+                    R1.write(f"{r1_seq}\n")
                     R1.write("+\n")
-                    R1.write(f"{r.quality[15:48]}\n")
+                    R1.write(f"{r1_qual}\n")
 
                     R2.write(f"@{r.name}_2\n")
-                    R2.write(f"{r.sequence[15:48]}\n")
+                    R2.write(f"{r2_seq}\n")
                     R2.write("+\n")
-                    R2.write(f"{r.quality[15:48]}\n")
+                    R2.write(f"{r2_qual}\n")
+                    
+                    #if do_qc and i % 500 == 0:
+                    #    
+                    #    quals = r.get_quality_array()
+                    #    quality_calc(seq, quals, r_base_dict, r_qual_dict)
+                        
+                    
+                    
+                    #r2_all.append(r2_seq)
+                    #print('r2',pos_con_in_end, mappy.revcomp(seq[-trim_end-50:-trim_end]))
 
+                    
+                    #r1_all.append(r1_seq)
+                    #print('r1',pos_con_in_begin, r1_seq,dist_left_const)
+                
+            
             if i > N_read_extract and limit:
                 break
 
-    r_qual_df = quality_df(r_qual_dict)
-    r_base_df = quality_df(r_base_dict)
-    r_qual_df.to_csv(ultima_fastq.replace(".fastq", "_quals.csv"))
-    r_base_df.to_csv(ultima_fastq.replace(".fastq", "_bases.csv"))
+    #r_qual_df = quality_df(r_qual_dict)
+    #r_base_df = quality_df(r_base_dict)
+    #r_qual_df.to_csv(ultima_fastq.replace(".fastq", "_quals.csv"))
+    #r_base_df.to_csv(ultima_fastq.replace(".fastq", "_bases.csv"))
 
     R1.close()
     R2.close()
 
-    """
-
-            if len1 >= 43 and len2 >= 43:
                 
-                if seq1.count('N')<=5:
-                    
-                    r1_UP = seq1[8:26] == UP_seq
-                    if r1_UP:
-                        seq_counter(r1_edits_dict,0)
-                    else:
-                        edit_pass1, edit1 = UP_edit_pass(seq1,max_dist)
-                        seq_counter(r1_edits_dict,edit1)
-                        
-                    r2_UP = seq2[8:26] == UP_seq
-                    
-                    if r2_UP:
-                        seq_counter(r2_edits_dict,0)
-                    else:
-                        edit_pass2, edit2 = UP_edit_pass(seq2,max_dist)
-                        seq_counter(r2_edits_dict,edit2)
-                        
-                    if r1_UP or edit_pass1:
-                        
-                        if r2_UP or edit_pass2:
-                            write_fastq_pair_recon(R1_recon,R2_recon,r1,r2)
-                        else:
-                            write_fastq_pair_clean(R1_clean,R2_clean,r1,r2,bcs_dict,r1_polyA_cnt_dict,r1_polyT_cnt_dict)
-        
-
-            if i>N_read_extract and limit: break
-    """
-
-
+                
 def seq_slice(read_seq, bc_intervals, umi_intervals):
     bc = "".join([read_seq[intv[0] : intv[1]] for intv in bc_intervals])
     umi = "".join([read_seq[intv[0] : intv[1]] for intv in umi_intervals])
@@ -230,23 +256,12 @@ def seq_slice(read_seq, bc_intervals, umi_intervals):
 
 
 def find_sub_fastq_parts(indir, sample):
-    pattern = re.compile(r"_R1.part_(.*?)\.fastq")
+    #pattern = re.compile(r"_R1.part_(.*?)\.fastq")
+    pattern = re.compile(r"^(?!.*R[12]).*part_\d{3}\.fastq")
+    print(pattern)
     all_files = os.listdir(f"{indir}/{sample}/split/")
-
     # part + 3 digits because we did split suffix with 3 digits
     all_parts = [f.split(".part_")[1][:3] for f in all_files if pattern.search(f)]
     parts = sorted(np.unique(all_parts))
 
     return parts
-
-
-def write_fastq_pair_recon(R1_recon, R2_recon, r1, r2):
-    R1_recon.write(f"@{r1.name}\n")
-    R1_recon.write(f"{r1.sequence[:50]}\n")
-    R1_recon.write("+\n")
-    R1_recon.write(f"{r1.quality[:50]}\n")
-
-    R2_recon.write(f"@{r2.name}\n")
-    R2_recon.write(f"{r2.sequence[:50]}\n")
-    R2_recon.write("+\n")
-    R2_recon.write(f"{r2.quality[:50]}\n")

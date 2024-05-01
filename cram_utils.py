@@ -23,7 +23,7 @@ const_5prime_full_forward = "CTACACGACGCTCTTCCGATCT"  # left
 right_const = const_3prime_full_reverse[:20]
 left_const = const_5prime_full_forward[-20:]
 
-N_read_extract = 1000000
+N_read_extract = 100000
 
 print(N_read_extract)
 
@@ -101,7 +101,6 @@ def edit_match(input_seq, target_seq, max_dist):
 
     return (match, dist)
 
-
 def quality_calc(seq, quals, bases_dict, quals_dict):
     for i in range(len(seq)):
         if bases_dict.get(str(i)) is None:
@@ -126,34 +125,39 @@ def quality_df(quals_dict):
     # quals_df.columns = ['base', 'quality', 'tot_count']
     # quals_df['mult'] = quals_df.quality * quals_df.tot_count
     # quals_df_grouped = quals_df.groupby('base').sum()
-    quals_df.columns = ["position", "base_qual", "tot_count"]
-    quals_df.position = quals_df.position.astype("int")
+    quals_df.columns = ["position", "value", "ncount"]
+    quals_df.position = quals_df.position.astype("int") + 1
     # quals_df[quals_df.position.isin(np.arange(10))]
     counts_df = quals_df.groupby("position").sum()
     quals_df["position_cnt"] = quals_df.position.apply(
-        lambda x: counts_df.loc[x].tot_count
+        lambda x: counts_df.loc[x].ncount
     )
-    quals_df["freq"] = quals_df.tot_count / quals_df.position_cnt * 100
+    quals_df["freq"] = quals_df.ncount / quals_df.position_cnt * 100
     return quals_df
-
 
 def extract_trimmed_fastq_pairs(indir, sample, part, limit):
     i = 0
     max_dist = 3
+    
+    timmed_length = 55
 
     ultima_fastq = f"{indir}/{sample}/split/{sample}.part_{part}.fastq"
 
     R1_fastq = f"{indir}/{sample}/split/{sample}_R1.part_{part}.fastq"
     R2_fastq = f"{indir}/{sample}/split/{sample}_R2.part_{part}.fastq"
 
-    r_qual_dict = {}
-    r_base_dict = {}
-
+    r1_qual_dict = {}
+    r2_qual_dict = {}
+    
+    r1_base_dict = {}
+    r2_base_dict = {}
+    
     do_qc = True
-
-    # if os.path.isfile(bcs_json):
-    #    print(bcs_json, " exists, skip")
-    #    return
+    
+    R1_quals = R1_fastq.replace(".fastq", "_quals.csv")
+    if os.path.isfile(R1_quals):
+        print(R1_quals, " exists, skip")
+        return
 
     R1 = open(R1_fastq, "w")
     R2 = open(R2_fastq, "w")
@@ -166,20 +170,7 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
 
             rlen = len(seq)
 
-            if rlen > 130 and rlen < 170:
-                end_seq = seq[-50:]
-                accept_r2 = False
-                pos_con_in_end = end_seq.find(right_const)
-                if pos_con_in_end >= 0:
-                    accept_r2 = True
-                    dist = 0
-                else:
-                    edit = edlib.align(right_const, end_seq, "HW", "locations", 3)
-                    dist = edit["editDistance"]
-                    if dist >= 0:
-                        accept_r2 = True
-                        locs = edit["locations"][0]
-                        pos_con_in_end = locs[0]
+            if rlen > 135 and rlen < 170:
 
                 begin_seq = seq[:50]
                 accept_r1 = False
@@ -189,23 +180,37 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
                     dist_left_const = 0
                     pos_con_in_begin += len(left_const)
                 else:
-                    edit = edlib.align(left_const, begin_seq, "HW", "locations", 3)
+                    edit = edlib.align(left_const, begin_seq, "HW", "locations", max_dist)
                     dist = edit["editDistance"]
                     if dist >= 0:
                         accept_r1 = True
                         locs = edit["locations"][0]
                         pos_con_in_begin = locs[1] + 1
-                        dist_left_const = dist
+                        
+                end_seq = seq[-50:]
+                accept_r2 = False
+                pos_con_in_end = end_seq.find(right_const)
+                if pos_con_in_end >= 0:
+                    accept_r2 = True
+                    dist = 0
+                else:
+                    edit = edlib.align(right_const, end_seq, "HW", "locations", max_dist)
+                    dist = edit["editDistance"]
+                    if dist >= 0:
+                        accept_r2 = True
+                        locs = edit["locations"][0]
+                        pos_con_in_end = locs[0]
 
                 if accept_r2 and accept_r1:
                     qual = r.quality
+                    
                     trim_begin = pos_con_in_begin
-                    r1_seq = seq[trim_begin : trim_begin + 50]
-                    r1_qual = qual[trim_begin : trim_begin + 50]
-
+                    r1_seq = seq[trim_begin : trim_begin + timmed_length]
+                    r1_qual = qual[trim_begin : trim_begin + timmed_length]
+                    
                     trim_end = 50 - pos_con_in_end
-                    r2_seq = mappy.revcomp(seq[-trim_end - 50 : -trim_end])
-                    r2_qual = qual[-trim_end - 50 : -trim_end][::-1]
+                    r2_seq = mappy.revcomp(seq[-trim_end - timmed_length : -trim_end])
+                    r2_qual = qual[-trim_end - timmed_length : -trim_end][::-1]
 
                     R1.write(f"@{r.name}_1\n")
                     R1.write(f"{r1_seq}\n")
@@ -217,40 +222,29 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
                     R2.write("+\n")
                     R2.write(f"{r2_qual}\n")
 
-                    # if do_qc and i % 500 == 0:
-                    #
-                    #    quals = r.get_quality_array()
-                    #    quality_calc(seq, quals, r_base_dict, r_qual_dict)
-
-                    # r2_all.append(r2_seq)
-                    # print('r2',pos_con_in_end, mappy.revcomp(seq[-trim_end-50:-trim_end]))
-
-                    # r1_all.append(r1_seq)
-                    # print('r1',pos_con_in_begin, r1_seq,dist_left_const)
+                    if do_qc and i % 100 == 0:
+                        quality_calc(r1_seq, r1_qual, r1_base_dict, r1_qual_dict)
+                        quality_calc(r2_seq, r2_qual, r2_base_dict, r2_qual_dict)
 
             if i > N_read_extract and limit:
                 break
+    
+    r1_qual_df = quality_df(r1_qual_dict)
+    r2_qual_df = quality_df(r2_qual_dict)
+    r1_base_df = quality_df(r1_base_dict)
+    r2_base_df = quality_df(r2_base_dict)
 
-    # r_qual_df = quality_df(r_qual_dict)
-    # r_base_df = quality_df(r_base_dict)
-    # r_qual_df.to_csv(ultima_fastq.replace(".fastq", "_quals.csv"))
-    # r_base_df.to_csv(ultima_fastq.replace(".fastq", "_bases.csv"))
-
+    r1_qual_df.to_csv(R1_fastq.replace(".fastq", "_quals.csv"))
+    r2_qual_df.to_csv(R2_fastq.replace(".fastq", "_quals.csv"))
+    r1_base_df.to_csv(R1_fastq.replace(".fastq", "_bases.csv"))
+    r2_base_df.to_csv(R2_fastq.replace(".fastq", "_bases.csv"))
+    
     R1.close()
     R2.close()
-
-
-def seq_slice(read_seq, bc_intervals, umi_intervals):
-    bc = "".join([read_seq[intv[0] : intv[1]] for intv in bc_intervals])
-    umi = "".join([read_seq[intv[0] : intv[1]] for intv in umi_intervals])
-
-    return (bc, umi)
-
 
 def find_sub_fastq_parts(indir, sample):
     # pattern = re.compile(r"_R1.part_(.*?)\.fastq")
     pattern = re.compile(r"^(?!.*R[12]).*part_\d{3}\.fastq")
-    print(pattern)
     all_files = os.listdir(f"{indir}/{sample}/split/")
     # part + 3 digits because we did split suffix with 3 digits
     all_parts = [f.split(".part_")[1][:3] for f in all_files if pattern.search(f)]

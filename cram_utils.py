@@ -148,10 +148,10 @@ def extract_trimmed_fastq_pairs(indir, sample, part, limit):
 
     do_qc = True
 
-    R1_quals = R1_fastq.replace(".fastq", "_quals.csv")
-    if os.path.isfile(R1_quals):
-        print(R1_quals, " exists, skip")
-        return
+    # R1_quals = R1_fastq.replace(".fastq", "_quals.csv")
+    # if os.path.isfile(R1_quals):
+    #    print(R1_quals, " exists, skip")
+    #    return
 
     R1 = open(R1_fastq, "w")
     R2 = open(R2_fastq, "w")

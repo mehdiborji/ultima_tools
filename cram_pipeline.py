@@ -1,7 +1,6 @@
 import argparse
 from multiprocessing import Pool
 import cram_utils
-import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--cores", type=str)
